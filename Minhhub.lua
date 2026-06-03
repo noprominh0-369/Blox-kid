@@ -148,4 +148,4 @@ function LoadSettings()
 end
 
 -- Tải cài đặt ngay khi khởi chạy script
-LoadSettings())
+LoadSettings().
