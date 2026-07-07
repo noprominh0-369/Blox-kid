@@ -1,0 +1,142 @@
+-- Xác định các dịch vụ cần thiết
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+
+local player = Players.LocalPlayer
+local autoFarmEnabled = false
+local selectedMobName = "Bandit" -- Thay đổi tên quái vật tùy theo level
+
+-- ==========================================
+-- 1. TẠO GIAO DIỆN NGƯỜI DÙNG (UI)
+-- ==========================================
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local ToggleButton = Instance.new("TextButton")
+
+-- Cấu hình Gui (Sử dụng PlayerGui cho môi trường chuẩn hoặc CoreGui nếu dùng executor)
+ScreenGui.Name = "AutoFarmUI"
+ScreenGui.Parent = game.CoreGui or player:WaitForChild("PlayerGui")
+
+-- Cấu hình MainFrame
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+MainFrame.Position = UDim2.new(0.5, -100, 0.5, -75)
+MainFrame.Size = UDim2.new(0, 200, 0, 150)
+MainFrame.Active = true
+MainFrame.Draggable = true -- Cho phép kéo thả UI
+
+-- Cấu hình Title
+Title.Name = "Title"
+Title.Parent = MainFrame
+Title.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Font = Enum.Font.SourceSansBold
+Title.Text = "Blox Fruits Auto Farm"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 20
+
+-- Cấu hình ToggleButton
+ToggleButton.Name = "ToggleFarm"
+ToggleButton.Parent = MainFrame
+ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+ToggleButton.Position = UDim2.new(0.1, 0, 0.5, 0)
+ToggleButton.Size = UDim2.new(0.8, 0, 0, 50)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.Text = "Auto Farm: OFF"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 24
+
+-- Logic nút Bật/Tắt (Toggle)
+ToggleButton.MouseButton1Click:Connect(function()
+    autoFarmEnabled = not autoFarmEnabled
+    if autoFarmEnabled then
+        ToggleButton.Text = "Auto Farm: ON"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+    else
+        ToggleButton.Text = "Auto Farm: OFF"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    end
+end)
+
+-- ==========================================
+-- 2. LOGIC TÌM QUÁI VÀ AUTO FARM
+-- ==========================================
+
+-- Hàm lấy quái vật gần nhất theo tên
+local function getNearestMob(mobName)
+    local nearestMob = nil
+    local shortestDistance = math.huge
+    local character = player.Character or player.CharacterAdded:Wait()
+    local rootPart = character:WaitForChild("HumanoidRootPart")
+
+    -- Blox Fruits thường lưu quái vật trong thư mục workspace.Enemies
+    local enemiesFolder = workspace:FindFirstChild("Enemies")
+    if not enemiesFolder then return nil end
+
+    for _, mob in pairs(enemiesFolder:GetChildren()) do
+        if mob.Name == mobName and mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+            local mobRoot = mob:FindFirstChild("HumanoidRootPart")
+            if mobRoot then
+                local distance = (rootPart.Position - mobRoot.Position).Magnitude
+                if distance < shortestDistance then
+                    shortestDistance = distance
+                    nearestMob = mob
+                end
+            end
+        end
+    end
+    return nearestMob
+end
+
+-- Hàm trang bị vũ khí (Melee hoặc Kiếm)
+local function equipWeapon()
+    local character = player.Character
+    if not character then return end
+
+    -- Tìm vũ khí trong Backpack và trang bị nó
+    for _, tool in pairs(player.Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            -- Tùy chỉnh ưu tiên vũ khí nếu cần
+            character.Humanoid:EquipTool(tool)
+            break
+        end
+    end
+end
+
+-- Vòng lặp chính cho Auto Farm
+task.spawn(function()
+    while task.wait() do
+        if autoFarmEnabled then
+            local character = player.Character
+            if character and character:FindFirstChild("HumanoidRootPart") then
+                local rootPart = character.HumanoidRootPart
+                local targetMob = getNearestMob(selectedMobName)
+
+                if targetMob and targetMob:FindFirstChild("HumanoidRootPart") then
+                    -- 1. Dịch chuyển (Teleport/CFrame) đến sau lưng quái vật để tránh sát thương
+                    local mobRoot = targetMob.HumanoidRootPart
+                    rootPart.CFrame = mobRoot.CFrame * CFrame.new(0, 5, 5) -- Đứng trên và phía sau 5 stud
+
+                    -- 2. Đóng băng nhân vật trên không (Tùy chọn: giúp không bị rớt)
+                    rootPart.Velocity = Vector3.new(0, 0, 0)
+
+                    -- 3. Trang bị vũ khí
+                    equipWeapon()
+
+                    -- 4. Tấn công (Mô phỏng click chuột)
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton1(Vector2.new(0,0))
+                end
+            end
+        end
+    end
+end)
+
+-- Anti-AFK để tránh bị kick khi cắm chuột lâu
+player.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
